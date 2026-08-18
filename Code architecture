@@ -1,0 +1,94 @@
+import asyncio
+import sqlite3
+from langgraph.graph import StateGraph, START, END
+from typing import TypedDict
+import requests
+
+
+# Chat state
+class ChatState(TypedDict):
+    message: str
+    response: str
+
+
+# Async-like SQLite state storage
+def save_state(message, response):
+    conn = sqlite3.connect("chat.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chat_history (
+            message TEXT,
+            response TEXT
+        )
+    """)
+
+    cursor.execute(
+        "INSERT INTO chat_history VALUES (?, ?)",
+        (message, response)
+    )
+
+    conn.commit()
+    conn.close()
+
+
+# Tool 1: Web search
+def web_search(query):
+    return f"Searching the web for: {query}"
+
+
+# Tool 2: Stock price
+def get_stock_price(symbol):
+    # Example API call
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+    data = requests.get(url).json()
+
+    price = data["chart"]["result"][0]["meta"]["regularMarketPrice"]
+    return price
+
+
+# Agent
+def chatbot(state):
+    message = state["message"]
+
+    if message.startswith("stock"):
+        symbol = message.split()[-1].upper()
+        result = get_stock_price(symbol)
+
+    elif message.startswith("search"):
+        query = message.replace("search", "").strip()
+        result = web_search(query)
+
+    else:
+        result = f"Agent response: {message}"
+
+    save_state(message, result)
+
+    return {
+        "message": message,
+        "response": result
+    }
+
+
+# LangGraph workflow
+graph = StateGraph(ChatState)
+
+graph.add_node("chatbot", chatbot)
+
+graph.add_edge(START, "chatbot")
+graph.add_edge("chatbot", END)
+
+agent = graph.compile()
+
+
+# Run chatbot
+async def main():
+    result = agent.invoke({
+        "message": "stock AAPL",
+        "response": ""
+    })
+
+    print(result["response"])
+
+
+asyncio.run(main())
