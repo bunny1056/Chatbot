@@ -1,0 +1,13 @@
+import streamlit as st
+
+st.title("Multi-Utility Agentic Chatbot")
+
+message = st.chat_input("Ask something...")
+
+if message:
+    result = agent.invoke({
+        "message": message,
+        "response": ""
+    })
+
+    st.write(result["response"])
